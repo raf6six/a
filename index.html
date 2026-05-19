@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>1:1 Video Chat - Omegle Style</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      user-select: none;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #1a1a1a;
+      color: #fff;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .container {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      padding: 20px;
+      gap: 20px;
+    }
+
+    .video-container {
+      flex: 2;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .video-box {
+      flex: 1;
+      min-width: 280px;
+      background: #2d2d2d;
+      border-radius: 24px;
+      overflow: hidden;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+      position: relative;
+      aspect-ratio: 4 / 3;
+    }
+
+    .video-box video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      background: #000;
+    }
+
+    .video-label {
+      position: absolute;
+      bottom: 12px;
+      left: 12px;
+      background: rgba(0,0,0,0.6);
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 14px;
+      font-weight: 500;
+      backdrop-filter: blur(4px);
+      pointer-events: none;
+    }
+
+    .controls-row {
+      background: #2d2d2d;
+      border-radius: 60px;
+      padding: 12px 20px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: center;
+      align-items: center;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+
+    button {
+      background: #3a3a3a;
+      border: none;
+      color: white;
+      font-size: 16px;
+      font-weight: bold;
+      padding: 10px 22px;
+      border-radius: 40px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-family: inherit;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    }
+
+    button:active {
+      transform: scale(0.96);
+    }
+
+    button.next {
+      background: #4caf50;
+    }
+    button.next:hover { background: #45a049; }
+
+    button.stop {
+      background: #f44336;
+    }
+    button.stop:hover { background: #d32f2f; }
+
+    button.primary {
+      background: #2196f3;
+    }
+    button.primary:hover { background: #0b7dda; }
+
+    .media-btn {
+      background: #555;
+      min-width: 100px;
+    }
+    .media-btn.active {
+      background: #4caf50;
+    }
+    .media-btn.muted {
+      background: #f44336;
+    }
+
+    .filters {
+      background: #2d2d2d;
+      border-radius: 40px;
+      padding: 12px 20px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      justify-content: center;
+      align-items: center;
+      font-size: 14px;
+    }
+
+    .filter-group {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      background: #3a3a3a;
+      padding: 6px 16px;
+      border-radius: 40px;
+    }
+
+    .filter-group label {
+      font-weight: 500;
+    }
+
+    select {
+      background: #1e1e1e;
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-family: inherit;
+      cursor: pointer;
+    }
+
+    .status {
+      background: #000000aa;
+      backdrop-filter: blur(8px);
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 8px 20px;
+      border-radius: 40px;
+      font-size: 14px;
+      pointer-events: none;
+      z-index: 100;
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    @media (max-width: 700px) {
+      .controls-row { border-radius: 30px; padding: 10px 12px; }
+      button { padding: 6px 16px; font-size: 13px; }
+      .media-btn { min-width: 70px; }
+      .filters { border-radius: 30px; gap: 10px; }
+      .filter-group { padding: 4px 12px; }
+      .video-container { flex-direction: column; }
+      .video-box { width: 100%; }
+      .status { font-size: 12px; white-space: normal; width: 90%; text-align: center; bottom: 10px; }
+    }
+
+    .permission-prompt {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.9);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+      flex-direction: column;
+      gap: 20px;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="video-container">
+    <div class="video-box">
+      <video id="localVideo" autoplay muted playsinline></video>
+      <div class="video-label">You</div>
+    </div>
+    <div class="video-box">
+      <video id="remoteVideo" autoplay playsinline></video>
+      <div class="video-label">Partner</div>
+    </div>
+  </div>
+
+  <div class="filters">
+    <div class="filter-group">
+      <label>I am:</label>
+      <select id="myGender">
+        <option value="male">Male</option>
+        <option value="female">Female</option>
+        <option value="other">Other</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>Interested in:</label>
+      <select id="interestedGender">
+        <option value="both">Both</option>
+        <option value="male">Male</option>
+        <option value="female">Female</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>My Country:</label>
+      <select id="country">
+        <option value="any">Any</option>
+        <option value="US">USA</option>
+        <option value="GB">UK</option>
+        <option value="CA">Canada</option>
+        <option value="AU">Australia</option>
+        <option value="DE">Germany</option>
+        <option value="FR">France</option>
+        <option value="JP">Japan</option>
+        <option value="BR">Brazil</option>
+        <option value="IN">India</option>
+        <option value="other">Other</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label>Match country:</label>
+      <select id="countryFilter">
+        <option value="any">Any country</option>
+        <option value="same">Same country</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="controls-row">
+    <button id="micBtn" class="media-btn active">🎤 Mic On</button>
+    <button id="camBtn" class="media-btn active">📷 Cam On</button>
+    <button id="nextBtn" class="next">⏩ Next</button>
+    <button id="stopBtn" class="stop">⏹️ Stop</button>
+  </div>
+  <div id="status" class="status">🔴 Allow camera & mic to start</div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+  const socket = io();
+
+  // DOM elements
+  const localVideo = document.getElementById('localVideo');
+  const remoteVideo = document.getElementById('remoteVideo');
+  const nextBtn = document.getElementById('nextBtn');
+  const stopBtn = document.getElementById('stopBtn');
+  const micBtn = document.getElementById('micBtn');
+  const camBtn = document.getElementById('camBtn');
+  const statusDiv = document.getElementById('status');
+  const myGenderSelect = document.getElementById('myGender');
+  const interestedGenderSelect = document.getElementById('interestedGender');
+  const countrySelect = document.getElementById('country');
+  const countryFilterSelect = document.getElementById('countryFilter');
+
+  let localStream = null;
+  let peerConnection = null;
+  let isInCall = false;
+  let currentPartnerId = null;
+  let isWaiting = false;
+
+  // Track states
+  let isMicMuted = false;
+  let isCamOff = false;
+
+  // STUN servers
+  const configuration = {
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' }
+    ]
+  };
+
+  // Get user media and store stream
+  async function initMedia() {
+    try {
+      localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      localVideo.srcObject = localStream;
+      
+      // Initial state: both on
+      isMicMuted = false;
+      isCamOff = false;
+      updateMicButton();
+      updateCamButton();
+      
+      statusDiv.innerText = '✅ Camera & mic ready. Click Next to start.';
+    } catch (err) {
+      console.error(err);
+      statusDiv.innerText = '❌ Failed to get camera/mic. Please allow permissions and refresh.';
+    }
+  }
+
+  // Toggle microphone
+  function toggleMic() {
+    if (!localStream) return;
+    const audioTrack = localStream.getAudioTracks()[0];
+    if (audioTrack) {
+      audioTrack.enabled = !audioTrack.enabled;
+      isMicMuted = !audioTrack.enabled;
+      updateMicButton();
+    }
+  }
+
+  // Toggle camera
+  function toggleCam() {
+    if (!localStream) return;
+    const videoTrack = localStream.getVideoTracks()[0];
+    if (videoTrack) {
+      videoTrack.enabled = !videoTrack.enabled;
+      isCamOff = !videoTrack.enabled;
+      updateCamButton();
+    }
+  }
+
+  function updateMicButton() {
+    if (isMicMuted) {
+      micBtn.textContent = '🎤 Mic Off';
+      micBtn.classList.remove('active');
+      micBtn.classList.add('muted');
+    } else {
+      micBtn.textContent = '🎤 Mic On';
+      micBtn.classList.remove('muted');
+      micBtn.classList.add('active');
+    }
+  }
+
+  function updateCamButton() {
+    if (isCamOff) {
+      camBtn.textContent = '📷 Cam Off';
+      camBtn.classList.remove('active');
+      camBtn.classList.add('muted');
+    } else {
+      camBtn.textContent = '📷 Cam On';
+      camBtn.classList.remove('muted');
+      camBtn.classList.add('active');
+    }
+  }
+
+  function joinQueue() {
+    const prefs = getPreferences();
+    socket.emit('join', prefs);
+    statusDiv.innerText = '🔍 Looking for a partner...';
+    isWaiting = true;
+  }
+
+  function getPreferences() {
+    return {
+      gender: myGenderSelect.value,
+      interestedGender: interestedGenderSelect.value,
+      country: countrySelect.value,
+      countryFilter: countryFilterSelect.value
+    };
+  }
+
+  function updatePreferences() {
+    if (!isInCall && !isWaiting) {
+      socket.emit('updatePreferences', getPreferences());
+    } else if (!isInCall && isWaiting) {
+      socket.emit('updatePreferences', getPreferences());
+    }
+  }
+
+  // When filters change, update server preferences
+  myGenderSelect.addEventListener('change', updatePreferences);
+  interestedGenderSelect.addEventListener('change', updatePreferences);
+  countrySelect.addEventListener('change', updatePreferences);
+  countryFilterSelect.addEventListener('change', updatePreferences);
+
+  micBtn.addEventListener('click', toggleMic);
+  camBtn.addEventListener('click', toggleCam);
+
+  function createPeerConnection(isOfferer, targetId) {
+    if (peerConnection) {
+      peerConnection.close();
+    }
+    peerConnection = new RTCPeerConnection(configuration);
+    
+    // Add local tracks (if we have stream)
+    if (localStream) {
+      localStream.getTracks().forEach(track => {
+        peerConnection.addTrack(track, localStream);
+      });
+    }
+    
+    peerConnection.ontrack = (event) => {
+      if (remoteVideo.srcObject !== event.streams[0]) {
+        remoteVideo.srcObject = event.streams[0];
+      }
+    };
+    
+    peerConnection.onicecandidate = (event) => {
+      if (event.candidate) {
+        socket.emit('ice-candidate', { candidate: event.candidate });
+      }
+    };
+    
+    peerConnection.onconnectionstatechange = () => {
+      if (peerConnection.connectionState === 'disconnected' || peerConnection.connectionState === 'failed') {
+        resetCall();
+        statusDiv.innerText = '⚠️ Connection lost. Press Next to find new partner.';
+        isInCall = false;
+        currentPartnerId = null;
+      }
+    };
+    
+    return peerConnection;
+  }
+  
+  async function startCall(isOfferer, partnerId) {
+    if (!localStream) return;
+    const pc = createPeerConnection(isOfferer, partnerId);
+    if (isOfferer) {
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      socket.emit('offer', { sdp: offer });
+    }
+    isInCall = true;
+    currentPartnerId = partnerId;
+    statusDiv.innerText = '🎥 Connected! You can talk now. Use mic/cam buttons to mute.';
+  }
+  
+  function resetCall() {
+    if (peerConnection) {
+      peerConnection.close();
+      peerConnection = null;
+    }
+    remoteVideo.srcObject = null;
+    isInCall = false;
+    currentPartnerId = null;
+  }
+  
+  // Socket events
+  socket.on('waiting', (data) => {
+    isWaiting = true;
+    statusDiv.innerText = '⏳ ' + data.message;
+  });
+  
+  socket.on('matched', async (data) => {
+    isWaiting = false;
+    const partnerId = data.partnerId;
+    // deterministic: lower socket.id creates offer
+    if (socket.id < partnerId) {
+      await startCall(true, partnerId);
+    } else {
+      await startCall(false, partnerId);
+    }
+  });
+  
+  socket.on('offer', async (data) => {
+    if (!peerConnection) {
+      await startCall(false, data.from);
+    }
+    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.sdp));
+    const answer = await peerConnection.createAnswer();
+    await peerConnection.setLocalDescription(answer);
+    socket.emit('answer', { sdp: answer });
+  });
+  
+  socket.on('answer', async (data) => {
+    if (peerConnection && peerConnection.signalingState === 'have-local-offer') {
+      await peerConnection.setRemoteDescription(new RTCSessionDescription(data.sdp));
+    }
+  });
+  
+  socket.on('ice-candidate', async (data) => {
+    if (peerConnection) {
+      try {
+        await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+      } catch(e) { console.warn('ICE add failed', e); }
+    }
+  });
+  
+  socket.on('partnerDisconnected', () => {
+    resetCall();
+    statusDiv.innerText = '👋 Partner left. Press Next to find someone new.';
+    isInCall = false;
+    currentPartnerId = null;
+    isWaiting = false;
+  });
+  
+  socket.on('stopped', () => {
+    resetCall();
+    statusDiv.innerText = '⏹️ Stopped. Press Next to start again.';
+    isWaiting = false;
+  });
+  
+  // Buttons
+  nextBtn.addEventListener('click', () => {
+    if (isInCall) {
+      resetCall();
+      socket.emit('next');
+    } else {
+      if (isWaiting) {
+        socket.emit('next'); // re-queue
+      } else {
+        socket.emit('next');
+      }
+    }
+    statusDiv.innerText = '⏩ Searching...';
+    isWaiting = true;
+  });
+  
+  stopBtn.addEventListener('click', () => {
+    if (isInCall) {
+      resetCall();
+      socket.emit('stop');
+    } else if (isWaiting) {
+      socket.emit('stop');
+      isWaiting = false;
+    }
+    statusDiv.innerText = '🛑 Stopped. Press Next to connect.';
+  });
+  
+  // Start media on load
+  initMedia();
+</script>
+</body>
+</html>
